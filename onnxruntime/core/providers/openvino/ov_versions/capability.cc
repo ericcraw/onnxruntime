@@ -58,12 +58,12 @@ std::vector<std::unique_ptr<ComputeCapability>> GetCapability::Execute() {
   std::unordered_set<std::string> ng_required_initializers;
 
   const auto unsupported_nodes = data_ops_->GetUnsupportedNodeIndices(ng_required_initializers, has_external_weights_);
-#ifndef NDEBUG
+#if 1
   if (openvino_ep::backend_utils::IsDebugEnabled()) {
     std::cout << "No of unsupported nodes " << unsupported_nodes.size() << std::endl;
     for (size_t i = 0; i < unsupported_nodes.size(); i++) {
       const Node* node = graph_viewer_.GetNode(unsupported_nodes[i]);
-      std::cout << "Unsupported node op " << node->OpType() << std::endl;
+      std::cout << "Unsupported node op " << node->OpType() << ": " << node->Name() << std::endl;
     }
   }
 #endif
@@ -166,16 +166,16 @@ std::vector<std::unique_ptr<ComputeCapability>> GetCapability::Execute() {
       // Omitting zero dim subgraphs
       for (auto index : this_cluster) {
         const Node* node = graph_viewer_.GetNode(index);
-        if (data_ops_->DoNotOmitSubGraph(node->OpType())) {
-          for (const auto& input : node->InputDefs()) {
-            const auto& input_name = input->Name();
-            auto it = find(cluster_graph_inputs.begin(), cluster_graph_inputs.end(), input_name);
-            if (it != cluster_graph_inputs.end()) {
-              omit_subgraph = true;
-              break;
-            }
-          }
-        }
+        //if (data_ops_->DoNotOmitSubGraph(node->OpType())) {
+        //  for (const auto& input : node->InputDefs()) {
+        //    const auto& input_name = input->Name();
+        //    auto it = find(cluster_graph_inputs.begin(), cluster_graph_inputs.end(), input_name);
+        //    if (it != cluster_graph_inputs.end()) {
+        //      omit_subgraph = true;
+        //      break;
+        //    }
+        //  }
+        //}
 
         if (node->OpType() == "Conv" || node->OpType() == "Identity") {
           const auto& output_name = node->OutputDefs()[0]->Name();
