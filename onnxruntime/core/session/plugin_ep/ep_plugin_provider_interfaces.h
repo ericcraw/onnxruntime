@@ -140,6 +140,8 @@ class PluginExecutionProvider : public IExecutionProvider {
 
   std::unique_ptr<profiling::EpProfiler> GetProfiler() override;
 
+  OrtDevice GetOrtDeviceByMemType(OrtMemType mem_type) const override;
+
  private:
   const logging::Logger& GetEpLoggerOrDefault() const;
 
