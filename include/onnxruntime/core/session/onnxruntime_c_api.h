@@ -1052,7 +1052,7 @@ typedef OrtStatus*(ORT_API_CALL* RegisterCustomOpsFn)(OrtSessionOptions* options
  */
 typedef void (*RunAsyncCallbackFn)(void* user_data, OrtValue** outputs, size_t num_outputs, OrtStatusPtr status);
 
-/** \brief External memory handle type for importing GPU resources.
+/** \brief External memory handle type for importing external resources (GPU or host memory).
  *
  * \todo Add Linux DMA-BUF file descriptor for embedded GPU memory sharing
  *
@@ -1063,6 +1063,12 @@ typedef enum OrtExternalMemoryHandleType {
   ORT_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP = 1,          /**< Shared HANDLE from ID3D12Device::CreateSharedHandle(heap) */
   ORT_EXTERNAL_MEMORY_HANDLE_TYPE_VK_MEMORY_WIN32 = 2,     /**< Shared HANDLE from vkGetMemoryWin32HandleKHR, non-dedicated allocation */
   ORT_EXTERNAL_MEMORY_HANDLE_TYPE_VK_MEMORY_OPAQUE_FD = 3, /**< File descriptor from vkGetMemoryOpaqueFdKHR, non-dedicated allocation */
+  ORT_EXTERNAL_MEMORY_HANDLE_TYPE_CPU_VA = 4,              /**< A raw process-local pointer (virtual address) into host
+                                                                 memory, valid for the caller's lifetime. There is no
+                                                                 ownership transfer and no fd/HANDLE duplication.
+                                                                 Only meaningful to an importer running in the same
+                                                                 process/address space as the caller.
+                                                                 \since Version 1.29. */
 } OrtExternalMemoryHandleType;
 
 /** \brief Descriptor for importing external memory.
