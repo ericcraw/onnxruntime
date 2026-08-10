@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -95,8 +96,33 @@ OrtStatus* MulKernel::Compute(OrtKernelContext* kernel_ctx) {
       throw Ort::Exception("Expected 1 output for MulKernel", ORT_INVALID_ARGUMENT);
     }
 
-    auto output = kernel_context.GetOutput(0, shape0);
-    float* output_data = output.GetTensorMutableData<float>();
+    OrtValue* user_provided_output = nullptr;
+    RETURN_IF_ERROR(ort_api.KernelContext_GetUserProvidedOutput(kernel_ctx, 0, &user_provided_output));
+
+    // The output index immediately after the last output must be rejected without changing the out parameter.
+    OrtValue* invalid_output = user_provided_output != nullptr
+                                   ? user_provided_output
+                                   : reinterpret_cast<OrtValue*>(static_cast<uintptr_t>(1));
+    OrtValue* const invalid_output_before = invalid_output;
+    OrtStatus* invalid_index_status = ort_api.KernelContext_GetUserProvidedOutput(
+        kernel_ctx, num_outputs, &invalid_output);
+    if (invalid_index_status == nullptr || invalid_output != invalid_output_before) {
+      if (invalid_index_status != nullptr) {
+        ort_api.ReleaseStatus(invalid_index_status);
+      }
+      return ort_api.CreateStatus(ORT_FAIL, "KernelContext_GetUserProvidedOutput accepted an invalid output index");
+    }
+    ort_api.ReleaseStatus(invalid_index_status);
+
+    float* output_data = nullptr;
+    if (user_provided_output != nullptr) {
+      void* raw_output_data = nullptr;
+      RETURN_IF_ERROR(ort_api.GetTensorMutableData(user_provided_output, &raw_output_data));
+      output_data = static_cast<float*>(raw_output_data);
+    } else {
+      auto output = kernel_context.GetOutput(0, shape0);
+      output_data = output.GetTensorMutableData<float>();
+    }
 
     for (size_t i = 0; i < input0.size(); ++i) {
       output_data[i] = input0[i] * input1[i];
