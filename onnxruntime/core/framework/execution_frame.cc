@@ -30,6 +30,7 @@ IExecutionFrame::IExecutionFrame(const OrtValueNameIdxMap& ort_value_idx_map,
                                  const NodeIndexInfo& node_index_info,
                                  gsl::span<const int> fetch_mlvalue_idxs)
     : node_index_info_(node_index_info),
+      user_provided_outputs_(static_cast<size_t>(ort_value_idx_map.MaxIdx()) + 1, 0),
       all_values_size_(static_cast<size_t>(ort_value_idx_map.MaxIdx()) + 1),
       fetch_mlvalue_idxs_(fetch_mlvalue_idxs.begin(), fetch_mlvalue_idxs.end()),
       ort_value_idx_map_(ort_value_idx_map) {
@@ -84,6 +85,7 @@ void IExecutionFrame::UpdateFetches(gsl::span<const int> fetch_mlvalue_idxs,
       ORT_ENFORCE(!all_values_[ort_value_idx].IsAllocated());
 
       all_values_[ort_value_idx] = fetches[idx];
+      user_provided_outputs_[ort_value_idx] = fetches[idx].IsAllocated() ? uint8_t{1} : uint8_t{0};
 
       // Copy the initializer if it is a fetch entry.
       auto entry = initializers.find(ort_value_idx);
@@ -135,6 +137,11 @@ const OrtValue* IExecutionFrame::GetNodeInputOrOutputMLValue(int index) const {
 
 OrtValue* IExecutionFrame::GetMutableNodeInputOrOutputMLValue(int index) {
   return const_cast<OrtValue*>(GetNodeInputOrOutputMLValue(index));
+}
+
+bool IExecutionFrame::IsUserProvidedOutput(int ort_value_idx) const {
+  return ort_value_idx >= 0 && static_cast<size_t>(ort_value_idx) < user_provided_outputs_.size() &&
+         user_provided_outputs_[ort_value_idx] != 0;
 }
 
 // TO DO: make it thread-safe
@@ -268,6 +275,7 @@ void IExecutionFrame::Init(gsl::span<const int> feed_mlvalue_idxs, gsl::span<con
 
   // 1. resize the all_value_ vector
   all_values_.resize(all_values_size_);
+  std::fill(user_provided_outputs_.begin(), user_provided_outputs_.end(), uint8_t{0});
 
   // 2. Handle non-empty output vector
   if (!fetches.empty()) {
@@ -276,6 +284,7 @@ void IExecutionFrame::Init(gsl::span<const int> feed_mlvalue_idxs, gsl::span<con
     for (size_t idx = 0; idx < num_fetches; ++idx) {
       int ort_value_idx = fetch_mlvalue_idxs_[idx];
       all_values_[ort_value_idx] = fetches[idx];
+      user_provided_outputs_[ort_value_idx] = fetches[idx].IsAllocated() ? uint8_t{1} : uint8_t{0};
     }
   }
 

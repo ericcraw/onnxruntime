@@ -377,6 +377,45 @@ void RunMulModelWithPluginEpUsingIOBinding(const Ort::SessionOptions& session_op
   EXPECT_THAT(output_span, ::testing::ElementsAre(2, 4, 6, 8, 10, 12));
 }
 
+void RunMulModelWithPluginEpUsingPreallocatedOutput(const Ort::SessionOptions& session_options) {
+  Ort::Session session(*ort_env, ORT_TSTR("testdata/mul_1.onnx"), session_options);
+
+  Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  std::vector<int64_t> shape = {3, 2};
+  std::vector<float> input0_data(6, 2.0f);
+  std::vector<float> output_data(6, -1.0f);
+  Ort::Value input = Ort::Value::CreateTensor<float>(
+      memory_info, input0_data.data(), input0_data.size(), shape.data(), shape.size());
+  Ort::Value output = Ort::Value::CreateTensor<float>(
+      memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
+
+  const char* input_names[] = {"X"};
+  const char* output_names[] = {"Y"};
+  session.Run(Ort::RunOptions{nullptr}, input_names, &input, 1, output_names, &output, 1);
+
+  EXPECT_THAT(output_data, ::testing::ElementsAre(2, 4, 6, 8, 10, 12));
+}
+
+void RunMulModelWithPluginEpUsingConcreteIOBindingOutput(const Ort::SessionOptions& session_options) {
+  Ort::Session session(*ort_env, ORT_TSTR("testdata/mul_1.onnx"), session_options);
+
+  Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  std::vector<int64_t> shape = {3, 2};
+  std::vector<float> input0_data(6, 2.0f);
+  std::vector<float> output_data(6, -1.0f);
+  Ort::Value input = Ort::Value::CreateTensor<float>(
+      memory_info, input0_data.data(), input0_data.size(), shape.data(), shape.size());
+  Ort::Value output = Ort::Value::CreateTensor<float>(
+      memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
+
+  Ort::IoBinding io_binding(session);
+  io_binding.BindInput("X", input);
+  io_binding.BindOutput("Y", output);
+  session.Run(Ort::RunOptions{nullptr}, io_binding);
+
+  EXPECT_THAT(output_data, ::testing::ElementsAre(2, 4, 6, 8, 10, 12));
+}
+
 // Builds a minimal ONNX model bytes with a single FP16 HardSigmoid node.
 // Graph: X[1,4 float16] -> HardSigmoid -> Y[1,4 float16]
 // HardSigmoid is used because it has NO MLFloat16 CPU kernel on any build config,
@@ -489,6 +528,30 @@ TEST(OrtEpLibrary, PluginEp_AppendV2_MulInference) {
   session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
 
   RunMulModelWithPluginEp(session_options);
+}
+
+TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_Run) {
+  RegisteredEpDeviceUniquePtr example_ep;
+  ASSERT_NO_FATAL_FAILURE(Utils::RegisterAndGetExampleEp(*ort_env, Utils::example_ep_info, example_ep));
+  Ort::ConstEpDevice plugin_ep_device(example_ep.get());
+
+  Ort::SessionOptions session_options;
+  std::unordered_map<std::string, std::string> ep_options;
+  session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
+
+  ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEpUsingPreallocatedOutput(session_options));
+}
+
+TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_IoBinding) {
+  RegisteredEpDeviceUniquePtr example_ep;
+  ASSERT_NO_FATAL_FAILURE(Utils::RegisterAndGetExampleEp(*ort_env, Utils::example_ep_info, example_ep));
+  Ort::ConstEpDevice plugin_ep_device(example_ep.get());
+
+  Ort::SessionOptions session_options;
+  std::unordered_map<std::string, std::string> ep_options;
+  session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
+
+  ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEpUsingConcreteIOBindingOutput(session_options));
 }
 
 // Creates a session with the example plugin EP and runs a model with a single Mul node.
@@ -1942,6 +2005,22 @@ TEST(OrtEpLibrary, PluginEp_Sync) {
   RunMulModelWithPluginEpUsingIOBinding(session_options);
 
   ASSERT_EQ(example_ep_hooks->get_sync_count(), 1) << "Expected Sync to be called once during inference";
+}
+
+TEST(OrtApi, KernelContextUserProvidedOutputApiVersionCompatibility) {
+  const OrtApiBase* api_base = OrtGetApiBase();
+  ASSERT_NE(api_base, nullptr);
+
+  // An API table with the new tail field must not break callers using the prior table size.
+  const OrtApi* previous_api = api_base->GetApi(ORT_API_VERSION - 1);
+  ASSERT_NE(previous_api, nullptr);
+  OrtStatus* status = previous_api->CreateStatus(ORT_FAIL, "compatibility test");
+  ASSERT_NE(status, nullptr);
+  previous_api->ReleaseStatus(status);
+
+  const OrtApi* current_api = api_base->GetApi(ORT_API_VERSION);
+  ASSERT_NE(current_api, nullptr);
+  ASSERT_NE(current_api->KernelContext_GetUserProvidedOutput, nullptr);
 }
 }  // namespace test
 }  // namespace onnxruntime
