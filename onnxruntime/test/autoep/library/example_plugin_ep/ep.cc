@@ -18,6 +18,7 @@
 #include "../ep_context_data_utils.h"
 #include "ep_factory.h"
 #include "ep_stream_support.h"
+#include "ep_test_hooks.h"
 
 extern std::atomic<uint64_t> g_sync_count;
 
@@ -97,7 +98,9 @@ OrtStatus* MulKernel::Compute(OrtKernelContext* kernel_ctx) {
     }
 
     OrtValue* user_provided_output = nullptr;
+
     RETURN_IF_ERROR(ort_api.KernelContext_GetUserProvidedOutput(kernel_ctx, 0, &user_provided_output));
+    ExampleEpTestHooks_RecordUserProvidedOutputQueryResult(user_provided_output != nullptr ? 1 : 0);
 
     // The output index immediately after the last output must be rejected without changing the out parameter.
     OrtValue* invalid_output = user_provided_output != nullptr

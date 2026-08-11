@@ -381,13 +381,15 @@ void RunMulModelWithPluginEpUsingPreallocatedOutput(const Ort::SessionOptions& s
   Ort::Session session(*ort_env, ORT_TSTR("testdata/mul_1.onnx"), session_options);
 
   Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  const auto output_memory_info =
+      session.GetEpDeviceForOutputs().at(0).GetMemoryInfo(OrtDeviceMemoryType_DEFAULT);
   std::vector<int64_t> shape = {3, 2};
   std::vector<float> input0_data(6, 2.0f);
   std::vector<float> output_data(6, -1.0f);
   Ort::Value input = Ort::Value::CreateTensor<float>(
       memory_info, input0_data.data(), input0_data.size(), shape.data(), shape.size());
   Ort::Value output = Ort::Value::CreateTensor<float>(
-      memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
+      output_memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
 
   const char* input_names[] = {"X"};
   const char* output_names[] = {"Y"};
@@ -400,13 +402,15 @@ void RunMulModelWithPluginEpUsingConcreteIOBindingOutput(const Ort::SessionOptio
   Ort::Session session(*ort_env, ORT_TSTR("testdata/mul_1.onnx"), session_options);
 
   Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  const auto output_memory_info =
+      session.GetEpDeviceForOutputs().at(0).GetMemoryInfo(OrtDeviceMemoryType_DEFAULT);
   std::vector<int64_t> shape = {3, 2};
   std::vector<float> input0_data(6, 2.0f);
   std::vector<float> output_data(6, -1.0f);
   Ort::Value input = Ort::Value::CreateTensor<float>(
       memory_info, input0_data.data(), input0_data.size(), shape.data(), shape.size());
   Ort::Value output = Ort::Value::CreateTensor<float>(
-      memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
+      output_memory_info, output_data.data(), output_data.size(), shape.data(), shape.size());
 
   Ort::IoBinding io_binding(session);
   io_binding.BindInput("X", input);
@@ -539,7 +543,14 @@ TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_Run) {
   std::unordered_map<std::string, std::string> ep_options;
   session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
 
+  Utils::LoadExampleEpHooksPtr example_ep_hooks;
+  ASSERT_NO_FATAL_FAILURE(Utils::LoadExampleEpHooks(Utils::example_ep_info, example_ep_hooks));
+  ASSERT_NE(example_ep_hooks->reset_user_provided_output_query, nullptr);
+  ASSERT_NE(example_ep_hooks->get_user_provided_output_query_result, nullptr);
+  example_ep_hooks->reset_user_provided_output_query();
+
   ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEpUsingPreallocatedOutput(session_options));
+  ASSERT_EQ(example_ep_hooks->get_user_provided_output_query_result(), 1);
 }
 
 TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_IoBinding) {
@@ -551,7 +562,37 @@ TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_IoBinding) {
   std::unordered_map<std::string, std::string> ep_options;
   session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
 
+  Utils::LoadExampleEpHooksPtr example_ep_hooks;
+  ASSERT_NO_FATAL_FAILURE(Utils::LoadExampleEpHooks(Utils::example_ep_info, example_ep_hooks));
+  ASSERT_NE(example_ep_hooks->reset_user_provided_output_query, nullptr);
+  ASSERT_NE(example_ep_hooks->get_user_provided_output_query_result, nullptr);
+  example_ep_hooks->reset_user_provided_output_query();
+
   ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEpUsingConcreteIOBindingOutput(session_options));
+  ASSERT_EQ(example_ep_hooks->get_user_provided_output_query_result(), 1);
+}
+
+TEST(OrtEpLibrary, PluginEp_KernelContextUserProvidedOutput_NotProvided) {
+  RegisteredEpDeviceUniquePtr example_ep;
+  ASSERT_NO_FATAL_FAILURE(Utils::RegisterAndGetExampleEp(*ort_env, Utils::example_ep_info, example_ep));
+  Ort::ConstEpDevice plugin_ep_device(example_ep.get());
+
+  Ort::SessionOptions session_options;
+  std::unordered_map<std::string, std::string> ep_options;
+  session_options.AppendExecutionProvider_V2(*ort_env, {plugin_ep_device}, ep_options);
+
+  Utils::LoadExampleEpHooksPtr example_ep_hooks;
+  ASSERT_NO_FATAL_FAILURE(Utils::LoadExampleEpHooks(Utils::example_ep_info, example_ep_hooks));
+  ASSERT_NE(example_ep_hooks->reset_user_provided_output_query, nullptr);
+  ASSERT_NE(example_ep_hooks->get_user_provided_output_query_result, nullptr);
+
+  example_ep_hooks->reset_user_provided_output_query();
+  ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEp(session_options));
+  ASSERT_EQ(example_ep_hooks->get_user_provided_output_query_result(), 0);
+
+  example_ep_hooks->reset_user_provided_output_query();
+  ASSERT_NO_FATAL_FAILURE(RunMulModelWithPluginEpUsingIOBinding(session_options));
+  ASSERT_EQ(example_ep_hooks->get_user_provided_output_query_result(), 0);
 }
 
 // Creates a session with the example plugin EP and runs a model with a single Mul node.

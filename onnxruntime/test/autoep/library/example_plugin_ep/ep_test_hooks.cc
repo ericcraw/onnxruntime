@@ -6,6 +6,16 @@
 #include <atomic>
 
 std::atomic<uint64_t> g_sync_count{0};
+std::atomic<int> g_user_provided_output_query_result{-1};
 
 extern "C" void ExampleEpTestHooks_ResetSyncCount() { g_sync_count.store(0); }
 extern "C" uint64_t ExampleEpTestHooks_GetSyncCount() { return g_sync_count.load(); }
+extern "C" void ExampleEpTestHooks_ResetUserProvidedOutputQuery() {
+  g_user_provided_output_query_result.store(-1);
+}
+extern "C" int ExampleEpTestHooks_GetUserProvidedOutputQueryResult() {
+  return g_user_provided_output_query_result.load();
+}
+extern "C" void ExampleEpTestHooks_RecordUserProvidedOutputQueryResult(int has_user_provided_output) {
+  g_user_provided_output_query_result.store(has_user_provided_output);
+}
