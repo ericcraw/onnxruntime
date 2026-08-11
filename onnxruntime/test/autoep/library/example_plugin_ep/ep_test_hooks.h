@@ -20,4 +20,7 @@
 extern "C" {
 EXPORT_SYMBOL void ExampleEpTestHooks_ResetSyncCount();
 EXPORT_SYMBOL uint64_t ExampleEpTestHooks_GetSyncCount();
+EXPORT_SYMBOL void ExampleEpTestHooks_ResetUserProvidedOutputQuery();
+EXPORT_SYMBOL int ExampleEpTestHooks_GetUserProvidedOutputQueryResult();
+EXPORT_SYMBOL void ExampleEpTestHooks_RecordUserProvidedOutputQueryResult(int has_user_provided_output);
 }
